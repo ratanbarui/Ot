@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Store Barcode Verification</title>
+
+<script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode"></script>
+
+<style>
+
+body{
+    font-family:Arial,sans-serif;
+    background:#f5f5f5;
+    margin:0;
+    padding:20px;
+}
+
+.card{
+    max-width:900px;
+    margin:auto;
+    background:white;
+    padding:20px;
+    border-radius:12px;
+    box-shadow:0 2px 10px rgba(0,0,0,.15);
+}
+
+h1{
+    text-align:center;
+}
+
+#reader{
+    width:320px;
+    margin:20px auto;
+}
+
+input[type=text]{
+    width:100%;
+    padding:12px;
+    font-size:18px;
+    box-sizing:border-box;
+}
+
+button{
+    padding:12px 20px;
+    font-size:16px;
+    background:#0066cc;
+    color:white;
+    border:none;
+    border-radius:6px;
+    cursor:pointer;
+}
+
+button:hover{
+    background:#0052a3;
+}
+
+.success{
+    background:#16a34a;
+    color:white;
+    padding:20px;
+    border-radius:10px;
+    margin-top:15px;
+    font-size:20px;
+}
+
+.fail{
+    background:#dc2626;
+    color:white;
+    padding:20px;
+    border-radius:10px;
+    margin-top:15px;
+    font-size:20px;
+}
+
+.summary{
+    display:flex;
+    justify-content:space-around;
+    margin-top:20px;
+    padding:10px;
+    background:#fafafa;
+    border-radius:8px;
+}
+
+.summary div{
+    font-weight:bold;
+}
+
+table{
+    width:100%;
+    border-collapse:collapse;
+    margin-top:20px;
+}
+
+th,td{
+    border:1px solid #ddd;
+    padding:8px;
+    text-align:center;
+}
+
+th{
+    background:#f0f0f0;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="card">
+
+<h1>📦 Barcode Verification App</h1>
+
+<h3>1. Upload Excel File</h3>
+
+<input
+type="file"
+id="excelFile"
+accept=".xlsx,.xls">
+
+<hr>
+
+<h3>2. Scan Barcode Using Camera</h3>
+
+<div id="reader"></div>
+
+<hr>
+
+<h3>3. Manual Barcode Entry</h3>
+
+<input
+type="text"
+id="manualBarcode"
+placeholder="Enter Barcode Here">
+
+<br><br>
+
+<button onclick="checkManualBarcode()">
+Check Barcode
+</button>
+
+<div id="result"></div>
+
+<div class="summary">
+
+<div>
+Total Scanned :
+<span id="total">0</span>
+</div>
+
+<div>
+Matched :
+<span id="matched">0</span>
+</div>
+
+<div>
+Not Found :
+<span id="notfound">0</span>
+</div>
+
+</div>
+
+<h3>Scan History</h3>
+
+<table>
+
+<thead>
+<tr>
+<th>Time</th>
+<th>Barcode</th>
+<th>Quantity</th>
+<th>Status</th>
+</tr>
+</thead>
+
+<tbody id="history"></tbody>
+
+</table>
+
+</div>
+
+<script>
+
+let items = [];
+
+let total = 0;
+let matched = 0;
+let notfound = 0;
+
+function updateCounters(){
+
+document.getElementById("total").innerText=total;
+document.getElementById("matched").innerText=matched;
+document.getElementById("notfound").innerText=notfound;
+
+}
+
+document
+.getElementById("excelFile")
+.addEventListener("change",function(e){
+
+const file=e.target.files[0];
+
+if(!file) return;
+
+const reader=new FileReader();
+
+reader.onload=function(evt){
+
+const workbook=XLSX.read(
+evt.target.result,
+{
+type:"array"
+}
+);
+
+const sheet=
+workbook.Sheets[
+workbook.SheetNames[0]
+];
+
+items=
+XLSX.utils.sheet_to_json(sheet);
+
+alert(
+items.length+
+" records loaded successfully"
+);
+
+};
+
+reader.readAsArrayBuffer(file);
+
+});
+
+function beepSuccess(){
+
+const audio=
+new Audio(
+"data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEA"
+);
+
+audio.play().catch(()=>{});
+
+}
+
+function processBarcode(code){
+
+const barcode=
+String(code).trim();
+
+const found=
+items.find(
+row =>
+String(row.Barcode).trim()
+=== barcode
+);
+
+const result=
+document.getElementById("result");
+
+total++;
+
+if(found){
+
+matched++;
+
+const qty=
+found.Quantity || 0;
+
+result.className=
+"success";
+
+result.innerHTML=
+`
+<b>✅ MATCH FOUND</b>
+<br><br>
+Barcode : ${barcode}
+<br>
+Quantity : ${qty}
+`;
+
+beepSuccess();
+
+const historyRow=
+`
+<tr>
+<td>${new Date().toLocaleString()}</td>
+<td>${barcode}</td>
+<td>${qty}</td>
+<td>FOUND</td>
+</tr>
+`;
+
+document
+.getElementById("history")
+.insertAdjacentHTML(
+"afterbegin",
+historyRow
+);
+
+}
+else{
+
+notfound++;
+
+result.className=
+"fail";
+
+result.innerHTML=
+`
+<b>❌ NOT FOUND</b>
+<br><br>
+Barcode : ${barcode}
+`;
+
+const historyRow=
+`
+<tr>
+<td>${new Date().toLocaleString()}</td>
+<td>${barcode}</td>
+<td>-</td>
+<td>NOT FOUND</td>
+</tr>
+`;
+
+document
+.getElementById("history")
+.insertAdjacentHTML(
+"afterbegin",
+historyRow
+);
+
+}
+
+updateCounters();
+
+}
+
+function checkManualBarcode(){
+
+const barcode=
+document
+.getElementById(
+"manualBarcode"
+)
+.value
+.trim();
+
+if(!barcode){
+
+alert(
+"Please enter barcode"
+);
+
+return;
+}
+
+processBarcode(barcode);
+
+}
+
+function startScanner(){
+
+if(
+typeof Html5QrcodeScanner
+=== "undefined"
+){
+
+alert(
+"Scanner library not loaded"
+);
+
+return;
+}
+
+const scanner=
+new Html5QrcodeScanner(
+"reader",
+{
+fps:10,
+qrbox:250
+}
+);
+
+scanner.render(
+
+function(decodedText){
+
+document
+.getElementById(
+"manualBarcode"
+)
+.value =
+decodedText;
+
+processBarcode(
+decodedText
+);
+
+},
+
+function(error){
+
+}
+
+);
+
+}
+
+startScanner();
+
+</script>
+
+</body>
+</html>
